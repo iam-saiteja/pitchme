@@ -2,18 +2,21 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
+import { LegalPageRouter } from './legalPages';
 import './styles.css';
 import './company-branding.css';
 import { startSupportPersistence } from './lib/supportPersistence';
 import { initCompanyBranding } from './companyBranding';
+import { initLegalFooter } from './legalFooter';
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
-  </React.StrictMode>,
-);
-
-startSupportPersistence();
-initCompanyBranding();
+const legalPaths = new Set(['/about','/terms','/privacy','/community-guidelines','/copyright-trademark']);
+const path = window.location.pathname;
+const root = ReactDOM.createRoot(document.getElementById('root')!);
+if (legalPaths.has(path)) {
+  root.render(<React.StrictMode><LegalPageRouter path={path} /></React.StrictMode>);
+} else {
+  root.render(<React.StrictMode><BrowserRouter><App /></BrowserRouter></React.StrictMode>);
+  startSupportPersistence();
+  initCompanyBranding();
+  initLegalFooter();
+}
