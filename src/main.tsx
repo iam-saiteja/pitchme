@@ -4,10 +4,12 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { LegalPageRouter } from './legalPages';
 import './styles.css';
+import './discovery.css';
 import './company-branding.css';
 import { startSupportPersistence } from './lib/supportPersistence';
 import { initCompanyBranding } from './companyBranding';
 import { initLegalFooter } from './legalFooter';
+import { initDiscovery } from './discoveryEnhancer';
 
 const legalPaths = new Set(['/about','/terms','/privacy','/community-guidelines','/copyright-trademark']);
 const path = window.location.pathname;
@@ -19,4 +21,5 @@ if (legalPaths.has(path)) {
   startSupportPersistence();
   initCompanyBranding();
   initLegalFooter();
+  initDiscovery();
 }
