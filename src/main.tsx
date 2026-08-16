@@ -7,6 +7,7 @@ import './styles.css';
 import './discovery.css';
 import './company-branding.css';
 import './admin-command-center.css';
+import './qa-polish.css';
 import { startSupportPersistence } from './lib/supportPersistence';
 import { initCompanyBranding } from './companyBranding';
 import { initLegalFooter } from './legalFooter';
