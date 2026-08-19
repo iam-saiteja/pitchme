@@ -1,106 +1,55 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { ArrowRight, Check, Flame, LockKeyhole, LogOut, Search, ShieldCheck, Sparkles, ThumbsUp, X } from 'lucide-react';
-import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import { createClient } from '@supabase/supabase-js';
-import type { Company, Pitch, Product, PitchStatus } from './types';
+import { lazy, Suspense, useEffect } from "react";
+import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
+import { Toaster } from "@/components/ui/sonner";
+import { Layout } from "@/components/pitchme/Layout";
+import Home from "@/pages/Home";
+import Discover from "@/pages/Discover";
+import Companies from "@/pages/Companies";
+import CompanyDetail from "@/pages/CompanyDetail";
+import PitchDetail from "@/pages/PitchDetail";
+import Submit from "@/pages/Submit";
+import About from "@/pages/About";
+import NotFound from "@/pages/NotFound";
+import { Terms, Privacy, CommunityGuidelines, CopyrightTrademark } from "@/pages/Legal";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
-const MILESTONES = [1, 25, 50, 100, 500, 1000];
+// The console is never linked publicly and is not needed by normal visitors.
+const Admin = lazy(() => import("@/pages/Admin"));
 
-function getFingerprint() {
-  const key = 'pitchme-anon-id';
-  let value = localStorage.getItem(key);
-  if (!value) {
-    value = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
-    localStorage.setItem(key, value);
-  }
-  return value;
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [pathname]);
+  return null;
 }
-function slugify(value: string) { return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }
-function formatNumber(value: number) { return new Intl.NumberFormat('en-US').format(value); }
 
 export default function App() {
-  return <Routes>
-    <Route path="/" element={<Home />} />
-    <Route path="/discover" element={<Discover />} />
-    <Route path="/companies" element={<CompaniesPage />} />
-    <Route path="/company/:slug" element={<CompanyPage />} />
-    <Route path="/pitch/:company/:product/:slug" element={<PitchPage />} />
-    <Route path="/submit" element={<SubmitPitch />} />
-    <Route path="/admin" element={<Admin />} />
-    <Route path="*" element={<NotFound />} />
-  </Routes>;
+  return (
+    <BrowserRouter>
+      <ScrollToTop />
+      <Layout>
+        <Suspense fallback={<div className="shell py-20" aria-busy="true" />}>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/discover" element={<Discover />} />
+            <Route path="/companies" element={<Companies />} />
+            <Route path="/company/:slug" element={<CompanyDetail />} />
+            <Route
+              path="/pitch/:companySlug/:productSlug/:pitchSlug"
+              element={<PitchDetail />}
+            />
+            <Route path="/submit" element={<Submit />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/community-guidelines" element={<CommunityGuidelines />} />
+            <Route path="/copyright-trademark" element={<CopyrightTrademark />} />
+            <Route path="/admin" element={<Admin />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
+      </Layout>
+      <Toaster />
+    </BrowserRouter>
+  );
 }
-
-function Layout({ children }: { children: React.ReactNode }) {
-  return <div className="app-shell">
-    <header className="topbar"><Link to="/" className="brand">pitchme<span>.</span></Link><nav><Link to="/discover">Discover</Link><Link to="/companies">Companies</Link><Link to="/submit">Pitch a feature</Link></nav></header>
-    <main>{children}</main>
-    <footer><div><strong>pitchme.</strong> Make products better.</div><div className="footer-note">Independent community feedback. No company affiliation implied.</div></footer>
-  </div>;
-}
-
-function usePublicData() {
-  const [pitches, setPitches] = useState<Pitch[]>([]); const [companies, setCompanies] = useState<Company[]>([]); const [products, setProducts] = useState<Product[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState('');
-  useEffect(() => {
-    if (!supabase) { setError('Supabase is not configured for this deployment.'); setLoading(false); return; }
-    void Promise.all([
-      supabase.from('pitches').select('*').neq('status', 'pending').order('support_count', { ascending: false }).limit(100),
-      supabase.from('companies').select('*').order('name'),
-      supabase.from('products').select('*').order('name'),
-    ]).then(([p, c, pr]) => {
-      if (p.error || c.error || pr.error) setError(p.error?.message ?? c.error?.message ?? pr.error?.message ?? 'Could not load public data.');
-      setPitches((p.data ?? []) as Pitch[]); setCompanies((c.data ?? []) as Company[]); setProducts((pr.data ?? []) as Product[]);
-    }).finally(() => setLoading(false));
-  }, []);
-  return { pitches, companies, products, loading, error };
-}
-
-function Home() {
-  const { companies, loading, error } = usePublicData();
-  return <Layout><section className="hero"><div className="eyebrow"><Sparkles size={15}/> Public product feedback</div><h1>Something missing?<br/><span>Pitch it.</span></h1><p className="hero-copy">Turn a product idea into a public request. Get people behind it. When a meaningful supporter milestone is reached, we contact the company manually and keep the response in the open.</p><div className="hero-actions"><Link className="button primary" to="/submit">Pitch a feature <ArrowRight size={18}/></Link><Link className="button ghost" to="/discover">Explore pitches</Link></div></section><section className="discover-section"><div className="section-head"><div><div className="section-kicker">Company directory</div><h2>Find a product.</h2></div><Link className="button ghost" to="/companies">View all companies</Link></div>{error?<Empty text={error}/>:loading?<Empty text="Loading companies..."/>:<div className="pitch-grid">{companies.slice(0,6).map(c=><CompanyCard key={c.id} company={c}/>)}</div>}</section><HowItWorks/></Layout>;
-}
-
-function Discover() {
-  const { pitches, companies, products, loading, error } = usePublicData(); const [query, setQuery] = useState('');
-  const filtered = useMemo(() => pitches.filter(p => `${p.title} ${p.body} ${companies.find(c=>c.id===p.company_id)?.name??''} ${products.find(pr=>pr.id===p.product_id)?.name??''}`.toLowerCase().includes(query.toLowerCase().trim())), [pitches,companies,products,query]);
-  return <Layout><div className="page-wrap"><div className="section-kicker">Discover</div><div className="section-head" style={{marginTop:8}}><div><h1 style={{margin:0,fontSize:'clamp(42px,6vw,68px)'}}>What people want changed.</h1></div><div className="searchbox"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search products, companies, pitches"/></div></div>{error?<Empty text={error}/>:loading?<Empty text="Loading pitches..."/>:filtered.length?<div className="pitch-grid">{filtered.map(p=><PitchCard key={p.id} pitch={p} company={companies.find(c=>c.id===p.company_id)} product={products.find(pr=>pr.id===p.product_id)}/>)}</div>:<Empty text="No pitches match that search."/>}</div></Layout>;
-}
-
-function CompaniesPage(){const {companies,loading,error}=usePublicData();return <Layout><div className="page-wrap"><div className="section-kicker">Directory</div><h1 style={{fontSize:'clamp(48px,7vw,78px)',margin:'16px 0 10px'}}>Companies people pitch.</h1><p className="form-intro">Browse products, discover requests, and see what their users want next.</p>{error?<Empty text={error}/>:loading?<Empty text="Loading companies..."/>:<div className="pitch-grid" style={{marginTop:32}}>{companies.map(c=><CompanyCard key={c.id} company={c}/>)}</div>}</div></Layout>}
-
-function CompanyCard({company}:{company:Company}){return <Link to={`/company/${company.slug}`} className="pitch-card"><div className="card-top"><span className="pill">Company</span><span className="status">Open directory</span></div><h3>{company.name}</h3><p>{company.description??'Explore products and community requests.'}</p><div className="card-footer"><span>{company.website?'Official website available':'Community directory'}</span><span>Open company <ArrowRight size={16}/></span></div></Link>}
-
-function CompanyPage(){
-  const {slug}=useParams(); const {pitches,companies,products,loading,error}=usePublicData(); const company=companies.find(c=>c.slug===slug);
-  if(loading)return <Layout><div className="success-state"><div className="section-kicker">Company</div><h1>Loading company.</h1></div></Layout>;
-  if(error||!company)return <NotFound message={error||'Company not found.'}/>;
-  const companyProducts=products.filter(p=>p.company_id===company.id); const companyPitches=pitches.filter(p=>p.company_id===company.id);
-  return <Layout><div className="page-wrap"><Link to="/companies" className="back-link">Back to companies</Link><div className="pitch-detail" style={{marginTop:40}}><div className="detail-kicker">Company</div><h1>{company.name}</h1><p className="detail-body">{company.description??'A public company page for community product feedback.'}</p>{company.website&&<a className="button ghost" href={company.website} target="_blank" rel="noreferrer">Visit website <ArrowRight size={16}/></a>}<section className="comments-placeholder" style={{marginTop:42}}><div className="section-kicker">Products</div><h2>Products</h2>{companyProducts.length?<div className="pitch-grid" style={{marginTop:22}}>{companyProducts.map(product=><div key={product.id} className="pitch-card"><div className="card-top"><span className="pill">Product</span><span className="status">{companyPitches.filter(p=>p.product_id===product.id).length} pitches</span></div><h3>{product.name}</h3><p>See what this product's users want changed.</p><div className="card-footer"><span>Community requests</span><span>{companyPitches.filter(p=>p.product_id===product.id).length} listed</span></div></div>)}</div>:<p>No products listed yet.</p>}</section><section className="discover-section" style={{paddingTop:46}}><div className="section-kicker">Community requests</div><h2 style={{margin:'8px 0 24px'}}>What people want from {company.name}.</h2>{companyPitches.length?<div className="pitch-grid">{companyPitches.map(p=><PitchCard key={p.id} pitch={p} company={company} product={products.find(pr=>pr.id===p.product_id)}/>)}</div>:<Empty text="No published pitches for this company yet."/>}</section></div></div></Layout>;
-}
-
-function PitchCard({pitch,company,product}:{pitch:Pitch;company?:Company;product?:Product}){return <Link to={`/pitch/${company?.slug??'company'}/${product?.slug??'product'}/${pitch.slug}`} className="pitch-card"><div className="card-top"><span className="pill">{product?.name??'Product'}</span><StatusBadge status={pitch.status}/></div><h3>{pitch.title}</h3><p>{pitch.body}</p><div className="card-footer"><span className="support-count"><Flame size={18}/> {formatNumber(pitch.support_count)} supporters</span><span>Open pitch <ArrowRight size={16}/></span></div></Link>}
-
-function PitchPage(){
-  const {company,product,slug}=useParams(); const [pitch,setPitch]=useState<Pitch|null>(null); const [companyRecord,setCompany]=useState<Company|null>(null); const [productRecord,setProduct]=useState<Product|null>(null); const [comments,setComments]=useState<any[]>([]); const [supported,setSupported]=useState(false); const [reaction,setReaction]=useState<string|null>(null); const [comment,setComment]=useState(''); const [notice,setNotice]=useState(''); const [loadError,setLoadError]=useState('');
-  useEffect(()=>{if(!supabase){setLoadError('Supabase is not configured for this deployment.');return;}void(async()=>{const {data:c,error:ce}=await supabase.from('companies').select('*').eq('slug',company).maybeSingle();const {data:p,error:pe}=await supabase.from('products').select('*').eq('slug',product).maybeSingle();if(ce||pe||!c||!p){setLoadError(ce?.message??pe?.message??'Company or product not found.');return;}const {data:pd,error:pe2}=await supabase.from('pitches').select('*').eq('company_id',c.id).eq('product_id',p.id).eq('slug',slug).neq('status','pending').maybeSingle();if(pe2||!pd){setLoadError(pe2?.message??'Pitch not found.');return;}const {data:cs}=await supabase.from('comments').select('*').eq('pitch_id',pd.id).eq('approved',true).order('created_at',{ascending:false});setPitch(pd as Pitch);setCompany(c as Company);setProduct(p as Product);setComments(cs??[]);})();},[company,product,slug]);
-  const support=async()=>{if(!supabase||!pitch||supported)return;const {data,error}=await supabase.rpc('increment_support',{p_pitch_id:pitch.id,p_fingerprint:getFingerprint()});if(error){setNotice(error.message);return;}setPitch(cur=>cur?{...cur,support_count:Number(data??cur.support_count)}:cur);setSupported(true);};
-  const react=async(kind:string)=>{if(!supabase||!pitch)return;const {error}=await supabase.rpc('add_pitch_reaction',{p_pitch_id:pitch.id,p_fingerprint:getFingerprint(),p_reaction:kind});if(error)setNotice(error.message);else setReaction(kind);};
-  const addComment=async(e:FormEvent)=>{e.preventDefault();if(!supabase||!pitch||!comment.trim())return;const {data,error}=await supabase.rpc('add_pitch_comment',{p_pitch_id:pitch.id,p_fingerprint:getFingerprint(),p_body:comment.trim()});if(error)setNotice(error.message);else if(data){setNotice('Comment submitted for review.');setComment('');}else setNotice('Comment could not be submitted.');};
-  if(loadError)return <NotFound message={loadError}/>; if(!pitch)return <Layout><div className="success-state"><div className="section-kicker">Pitch</div><h1>Loading request.</h1></div></Layout>;
-  return <Layout><div className="page-wrap"><Link to={companyRecord?`/company/${companyRecord.slug}`:'/discover'} className="back-link">Back to {companyRecord?.name??'discover'}</Link><div className="pitch-detail"><div className="detail-main"><div className="detail-kicker"><Link to={`/company/${companyRecord?.slug}`}>{companyRecord?.name}</Link> / {productRecord?.name}</div><h1>{pitch.title}</h1><p className="detail-body">{pitch.body}</p><div className="support-box"><div><strong>{formatNumber(pitch.support_count)}</strong><span>people want this</span></div><button className="button primary support-button" onClick={support} disabled={supported}>{supported?<Check size={18}/>:<ThumbsUp size={18}/>} {supported?'Supported':'I want this too'}</button></div><div className="status-timeline"><TimelineItem label="Pitch published" active/><TimelineItem label="Community support" active={pitch.support_count>=25} meta="Public support count keeps growing."/><TimelineItem label="Company contacted" active={(pitch.email_milestones_sent??[]).length>0} meta={(pitch.email_milestones_sent??[]).length?`Milestones: ${pitch.email_milestones_sent.join(', ')}`:'Waiting for a milestone.'}/><TimelineItem label="Company response" active={Boolean(pitch.company_response)}/></div>{pitch.company_response?<section className="response-card"><div className="response-label"><ShieldCheck size={17}/> Company response</div><p>{pitch.company_response}</p><div className="response-date">Published {pitch.responded_at?new Date(pitch.responded_at).toLocaleDateString():''}</div><div className="reaction-row">{[['helpful','Helpful'],['agree','I agree'],['not_enough','Not enough']].map(([v,l])=><button key={v} className={reaction===v?'active':''} onClick={()=>react(v)}>{l}</button>)}</div></section>:<div className="comments-placeholder"><p>No company response yet. This section will show it when one is received and verified.</p></div>}<section className="comments-placeholder"><div className="section-kicker">Community</div><h2>What people are saying</h2><form className="pitch-form" onSubmit={addComment}><textarea value={comment} onChange={e=>setComment(e.target.value)} rows={4} maxLength={1000} placeholder="Add something useful to the discussion..."/><button className="button ghost submit-button" disabled={!comment.trim()}>Post comment</button></form>{notice&&<p>{notice}</p>}{comments.length?<div style={{marginTop:24,display:'grid',gap:10}}>{comments.map(c=><div key={c.id} style={{padding:'16px',border:'1px solid #24242b',borderRadius:12,background:'#101014'}}><p style={{margin:0,lineHeight:1.6}}>{c.body}</p><small style={{color:'#71717a'}}>Community member</small></div>)}</div>:<p style={{color:'#71717a'}}>No approved comments yet.</p>}</section></div></div></div></Layout>;
-}
-
-function SubmitPitch(){const navigate=useNavigate();const [companies,setCompanies]=useState<Company[]>([]);const [products,setProducts]=useState<Product[]>([]);const [companyId,setCompanyId]=useState('');const [productId,setProductId]=useState('');const [title,setTitle]=useState('');const [body,setBody]=useState('');const [suggestedSlug,setSuggestedSlug]=useState('');const [accepted,setAccepted]=useState(false);const [done,setDone]=useState(false);const [error,setError]=useState('');useEffect(()=>{if(!supabase)return;void Promise.all([supabase.from('companies').select('*').order('name'),supabase.from('products').select('*').order('name')]).then(([c,p])=>{const cs=(c.data??[]) as Company[];setCompanies(cs);setProducts((p.data??[]) as Product[]);if(cs[0])setCompanyId(cs[0].id);});},[]);const availableProducts=products.filter(p=>p.company_id===companyId);useEffect(()=>{setProductId(availableProducts[0]?.id??'');},[companyId,products.length]);const submit=async(e:FormEvent)=>{e.preventDefault();setError('');if(!supabase||!accepted||!companyId||!productId)return;const {data,error:err}=await supabase.rpc('submit_pitch',{p_company_id:companyId,p_product_id:productId,p_title:title.trim(),p_body:body.trim(),p_suggested_slug:suggestedSlug||null});if(err||!data)setError(err?.message??'Could not submit the pitch.');else setDone(true);};if(done)return <Layout><div className="success-state"><div className="success-icon"><Check/></div><div className="section-kicker">Pitch received</div><h1>Your idea is in.</h1><p>It will be reviewed before becoming public. There is no account to manage.</p><button className="button primary" onClick={()=>navigate('/')}>Back to PitchMe</button></div></Layout>;return <Layout><div className="form-page"><div className="section-kicker">Create a pitch</div><h1>Give a product<br/><span>something better.</span></h1><p className="form-intro">No account. No followers. Just a useful idea and the people who agree with you.</p><form onSubmit={submit} className="pitch-form"><label>Company<select value={companyId} onChange={e=>setCompanyId(e.target.value)}>{companies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>Product<select value={productId} onChange={e=>setProductId(e.target.value)}>{availableProducts.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label><label>What should change?<input value={title} onChange={e=>setTitle(e.target.value)} placeholder="e.g. Add Speed Dial to Contacts" maxLength={140}/></label><label>Preferred URL slug <span className="helper">(optional, admin has final say)</span><input value={suggestedSlug} onChange={e=>setSuggestedSlug(slugify(e.target.value))} placeholder="speed-dial" maxLength={80}/></label><label>Why does this matter?<textarea value={body} onChange={e=>setBody(e.target.value)} rows={7} placeholder="Explain the problem and what would make the product better." maxLength={2000}/></label><label className="consent"><input type="checkbox" checked={accepted} onChange={e=>setAccepted(e.target.checked)}/><span>I understand this will be reviewed and, if accepted, publicly posted. I will not submit private, confidential, or abusive content.</span></label>{error&&<p style={{color:'#fda4af'}}>{error}</p>}<button className="button primary submit-button" disabled={!accepted||title.trim().length<8||body.trim().length<20||!companyId||!productId}>Submit pitch <ArrowRight size={18}/></button></form></div></Layout>;
-}
-
-function Admin(){const [session,setSession]=useState<any>(null);const [authorized,setAuthorized]=useState(false);const [checking,setChecking]=useState(true);const [email,setEmail]=useState('');const [password,setPassword]=useState('');const [error,setError]=useState('');const [pitches,setPitches]=useState<Pitch[]>([]);const [selected,setSelected]=useState<Pitch|null>(null);const [response,setResponse]=useState('');useEffect(()=>{if(!supabase){setChecking(false);return;}supabase.auth.getSession().then(({data})=>{setSession(data.session);if(!data.session)setChecking(false);});const {data:listener}=supabase.auth.onAuthStateChange((_e,s)=>setSession(s));return()=>listener.subscription.unsubscribe();},[]);useEffect(()=>{if(!session||!supabase)return;void(async()=>{const {data,error:err}=await supabase.rpc('is_pitchme_admin');setAuthorized(Boolean(data)&&!err);setChecking(false);if(data&&!err)await load();})();},[session]);async function load(){if(!supabase)return;const {data}=await supabase.from('pitches').select('*').order('created_at',{ascending:false});setPitches((data??[]) as Pitch[]);}async function login(e:FormEvent){e.preventDefault();if(!supabase)return;const {error:err}=await supabase.auth.signInWithPassword({email,password});if(err)setError(err.message);}async function publish(pitch:Pitch){if(!supabase)return;const {error:err}=await supabase.rpc('publish_pitch',{p_id:pitch.id,p_slug:pitch.slug||slugify(pitch.title),p_status:'open'});if(err)setError(err.message);else{await load();setSelected(null);}}async function markMilestone(pitch:Pitch,milestone:number){if(!supabase)return;const {error:err}=await supabase.from('email_milestone_events').insert({pitch_id:pitch.id,milestone,notes:'Manually sent by PitchMe admin.'});if(err){setError(err.message);return;}await supabase.from('pitches').update({email_milestones_sent:[...(pitch.email_milestones_sent??[]),milestone],last_email_milestone:milestone,status:'contacted',contacted_at:new Date().toISOString()}).eq('id',pitch.id);await load();setSelected(null);}async function saveResponse(pitch:Pitch){if(!supabase||!response.trim())return;const now=new Date().toISOString();const {error:err}=await supabase.from('company_responses').insert({pitch_id:pitch.id,body:response.trim(),verified:true,published_at:now,received_at:now});if(err){setError(err.message);return;}await supabase.from('pitches').update({company_response:response.trim(),company_response_verified:true,responded_at:now,status:'responded'}).eq('id',pitch.id);setResponse('');setSelected(null);await load();}if(checking)return <Layout><div className="success-state"><div className="section-kicker">Private</div><h1>Checking access.</h1></div></Layout>;if(!session)return <Layout><div className="form-page"><div className="section-kicker">Private workspace</div><h1>Admin<br/><span>sign in.</span></h1><p className="form-intro">Only the PitchMe administrator can manage pitches and outreach.</p><form className="pitch-form" onSubmit={login}><label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)}/></label><label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)}/></label>{error&&<p style={{color:'#fda4af'}}>{error}</p>}<button className="button primary">Sign in</button></form></div></Layout>;if(!authorized)return <Layout><div className="success-state"><LockKeyhole size={42}/><div className="section-kicker">Private workspace</div><h1>Access denied.</h1><p>Your account is authenticated but is not a PitchMe administrator.</p><button className="button ghost" onClick={()=>supabase?.auth.signOut()}>Sign out</button></div></Layout>;const pending=pitches.filter(p=>p.status==='pending');const published=pitches.filter(p=>p.status!=='pending');const responses=pitches.filter(p=>p.company_response);return <Layout><div className="admin-page"><div style={{display:'flex',justifyContent:'space-between',gap:15,alignItems:'center'}}><div><div className="section-kicker">Private</div><h1>Admin workspace</h1></div><button className="button ghost" onClick={()=>supabase?.auth.signOut()}><LogOut size={16}/> Sign out</button></div><p className="form-intro">Review pitches, publish good requests, manually contact companies at milestones, and publish verified replies.</p><div className="admin-grid"><div className="admin-card"><span>Pending review</span><strong>{pending.length}</strong><small>New pitches waiting.</small></div><div className="admin-card"><span>Published</span><strong>{published.length}</strong><small>Public requests.</small></div><div className="admin-card"><span>Responses</span><strong>{responses.length}</strong><small>Company replies published.</small></div></div><div className="milestone-panel"><h2>Pitch queue</h2>{pitches.length===0?<p>No pitches yet.</p>:pitches.slice(0,60).map(p=><div key={p.id} style={{padding:'18px 0',borderTop:'1px solid #24242b'}}><strong>{p.title}</strong><p style={{color:'#71717a',fontSize:12}}>{p.status} · {formatNumber(p.support_count)} supporters · {p.slug}</p><button className="button primary" onClick={()=>p.status==='pending'?publish(p):setSelected(p)}>{p.status==='pending'?'Publish':'Manage'}</button></div>)}</div>{selected&&<div className="milestone-panel" style={{marginTop:16}}><div className="section-kicker">Manage pitch</div><h2>{selected.title}</h2><p>{selected.body}</p><div className="milestones">{MILESTONES.map(m=><button className="button ghost" key={m} disabled={(selected.email_milestones_sent??[]).includes(m)||selected.support_count<m} onClick={()=>markMilestone(selected,m)}>{m}<span>supporters</span></button>)}</div><textarea value={response} onChange={e=>setResponse(e.target.value)} rows={5} placeholder="Paste the official company response here." style={{width:'100%',background:'#0f0f13',border:'1px solid #282830',color:'#fff',borderRadius:10,padding:12}}/><div style={{display:'flex',gap:8,marginTop:12}}><button className="button primary" onClick={()=>saveResponse(selected)} disabled={!response.trim()}>Publish response</button><button className="button ghost" onClick={()=>setSelected(null)}>Close</button></div></div>}</div></Layout>}
-
-function HowItWorks(){return <section className="how-section"><div className="section-kicker">How it works</div><div className="steps"><Step number="01" title="Pitch it" text="Describe what is missing. No account needed."/><Step number="02" title="Get support" text="People who want the same thing can support it without signing up."/><Step number="03" title="Reach a milestone" text="PitchMe tracks 1, 25, 50, 100, 500 and 1000 supporters."/><Step number="04" title="Hear back" text="When a company replies, the response can become part of the public record."/></div></section>}
-function TimelineItem({label,active,meta}:{label:string;active?:boolean;meta?:string}){return <div className={`timeline-item ${active?'active':''}`}><div className="timeline-dot">{active?<Check size={13}/>:<X size={13}/>}</div><div><strong>{label}</strong>{meta&&<small>{meta}</small>}</div></div>}
-function StatusBadge({status}:{status:PitchStatus}){const labels:Record<PitchStatus,string>={pending:'Pending',open:'Open',contacted:'Contacted',responded:'Responded',planned:'Planned',in_progress:'In progress',shipped:'Shipped',declined:'Declined'};return <span className={`status status-${status}`}>{labels[status]}</span>}
-function Step({number,title,text}:{number:string;title:string;text:string}){return <div className="step"><span>{number}</span><h3>{title}</h3><p>{text}</p></div>}
-function Empty({text}:{text:string}){return <div className="comments-placeholder"><p>{text}</p></div>}
-function NotFound({message}:{message?:string}){return <Layout><div className="success-state"><div className="section-kicker">404</div><h1>That page is not here.</h1><p>{message??'The requested PitchMe page could not be found.'}</p><Link className="button primary" to="/discover">Discover pitches</Link></div></Layout>}
